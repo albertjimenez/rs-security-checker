@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>rs-security-checker — Architecture Deck</title>
+  <style>
+    :root {
+      --bg-0: #060816;
+      --bg-1: #0a1330;
+      --glass: rgba(18, 32, 64, 0.72);
+      --glass-soft: rgba(18, 32, 64, 0.5);
+      --line: rgba(160, 214, 255, 0.28);
+      --line-strong: rgba(90, 200, 255, 0.55);
+      --fg: #eaf2ff;
+      --muted: #a8b8d8;
+      --accent: #6be7ff;
+      --accent-2: #a1a9ff;
+      --neon: #72ffff;
+      --shadow: 0 30px 70px rgba(0, 0, 0, 0.45);
+      --radius: 20px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--fg);
+      background:
+        radial-gradient(circle at 10% -10%, rgba(114,255,255,0.15), transparent 42%),
+        radial-gradient(circle at 90% 8%, rgba(120,98,255,0.22), transparent 45%),
+        radial-gradient(circle at 50% 120%, rgba(56,189,248,0.12), transparent 60%),
+        linear-gradient(180deg, var(--bg-0), var(--bg-1));
+      min-height: 100vh;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        135deg,
+        rgba(255,255,255,0.025) 0 2px,
+        transparent 2px 60px
+      );
+      pointer-events: none;
+      z-index: 0;
+    }
+    .shell { position: relative; z-index: 1; }
+    header {
+      padding: 4.5rem 1.5rem 3.5rem;
+      text-align: center;
+    }
+    .hero {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2.2rem 2rem;
+      border-radius: calc(var(--radius) + 6px);
+      background: linear-gradient(120deg, rgba(12,28,74,0.75), rgba(8,20,68,0.5), rgba(12,40,84,0.75));
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+    }
+    .kicker {
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-size: .85rem;
+      font-weight: 700;
+      margin-bottom: .6rem;
+    }
+    h1 {
+      margin: 0 0 .7rem;
+      font-size: clamp(2.1rem, 5vw, 3.5rem);
+      letter-spacing: -0.02em;
+      background: linear-gradient(90deg, #f2f9ff, var(--accent), var(--accent-2));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero p {
+      color: var(--muted);
+      font-size: 1.06rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .rail {
+      display: flex;
+      gap: .8rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 1.6rem;
+    }
+    .chip {
+      padding: .45rem 1rem;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(107,231,255,.12), rgba(161,169,255,.12));
+      border: 1px solid var(--line-strong);
+      color: var(--fg);
+      font-size: .92rem;
+      backdrop-filter: blur(8px);
+      font-weight: 500;
+    }
+    main {
+      max-width: 1250px;
+      margin: 0 auto 3rem;
+      padding: 0 1.5rem;
+    }
+    section {
+      margin: 1.8rem 0;
+      padding: 1.9rem;
+      background: var(--glass);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+    h2 {
+      margin: 0 0 1rem;
+      font-size: 1.5rem;
+      letter-spacing: -0.01em;
+      color: #ffffff;
+    }
+    .lead { color: var(--muted); margin-bottom: 1.1rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .card {
+      position: relative;
+      padding: 1.05rem;
+      border-radius: 16px;
+      background: var(--glass-soft);
+      border: 1px solid var(--line);
+      transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+      overflow: hidden;
+    }
+    .card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at top right, rgba(114, 255, 255, 0.08), transparent 50%);
+      opacity: 0;
+      transition: opacity .25s ease;
+    }
+    .card:hover {
+      transform: translateY(-6px);
+      border-color: var(--line-strong);
+      box-shadow: 0 20px 40px rgba(0,0,0,.35);
+    }
+    .card:hover::after { opacity: 1; }
+    .card h3 {
+      margin: 0 0 .35rem;
+      font-size: 1rem;
+      color: var(--accent);
+      letter-spacing: .03em;
+      text-transform: capitalize;
+    }
+    .card p { color: var(--muted); font-size: .95rem; margin: 0; }
+    .strong { color: var(--fg); }
+    ul { margin: .5rem 0 0 1.15rem; color: var(--muted); }
+    li { margin: .2rem 0; }
+    .pill {
+      display: inline-block;
+      background: rgba(11, 22, 50, 0.65);
+      padding: .38rem .85rem;
+      margin: .2rem;
+      border-radius: 999px;
+      font-size: .9rem;
+      border: 1px solid var(--line);
+      color: var(--fg);
+      backdrop-filter: blur(6px);
+    }
+    .pill--accent { border-color: var(--line-strong); color: var(--neon); }
+    .split {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 1.2rem;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .split { grid-template-columns: 1fr; }
+    }
+    code {
+      background: rgba(3,8,22,.5);
+      padding: .18rem .45rem;
+      border-radius: 8px;
+      border: 1px solid rgba(160,214,255,.2);
+      color: var(--neon);
+      font-size: .9em;
+    }
+    footer {
+      text-align: center;
+      padding: 2rem 1rem 3rem;
+      color: var(--muted);
+      font-size: .88rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="hero">
+        <div class="kicker">Rust security operations deck</div>
+        <h1>rs-security-checker</h1>
+        <p>Safe Rust port of the Debian/Ubuntu security-audit pipeline with AWS host checks, structured logging, and optional local-model triage.</p>
+        <div class="rail">
+          <span class="chip">explicit argv</span>
+          <span class="chip">fixed PATH + sanitized env</span>
+          <span class="chip">bounded outputs</span>
+          <span class="chip">process timeouts</span>
+          <span class="chip">11 staged coverage</span>
+        </div>
+      </div>
+    </header>
+    <main>
+      <section>
+        <h2>Why it exists</h2>
+        <p class="lead strong">It replaces a shell/Jenkins pipeline with predictable execution and auditable evidence, while keeping stage logic easy to inspect.</p>
+        <div class="split">
+          <div>
+            <p>Every command uses explicit argument arrays, fixed PATH, temporary sanitized environment, bounded reads and deterministic timeouts. This removes shell escapes, unbounded pipelines and missing evidence from the original audit flow.</p>
+            <p>Tests validate every stage, parallel disabled mode, excessive worker values, the runtime prompt and the typed-question contract.</p>
+          </div>
+          <div>
+            <span class="pill pill--accent">333 unit + 8 integration tests</span>
+            <span class="pill pill--accent">283 unit + 9 integration (default)</span>
+            <span class="pill">clippy clean default/full</span>
+            <span class="pill">panic-contained stages</span>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Eleven stages</h2>
+        <p class="lead">Each card maps to a first-class stage that can be executed alone, skipped, or excluded via documented false-positive patterns.</p>
+        <div class="grid">
+          <div class="card">
+            <h3>precheck</h3>
+            <p>dpkg/apt availability, missing tools, package metadata lock and installation candidates.</p>
+          </div>
+          <div class="card">
+            <h3>docker</h3>
+            <p>Privileged containers, Docker socket mounts (both socket paths), and daemon availability.</p>
+          </div>
+          <div class="card">
+            <h3>clamav</h3>
+            <p>Signature age, temp/container volume scans, scan time bounds and timeout reporting.</p>
+          </div>
+          <div class="card">
+            <h3>debsums</h3>
+            <p>Package checksum mismatches, changed system files, failed integrity checks.</p>
+          </div>
+          <div class="card">
+            <h3>rootkit</h3>
+            <p>chkrootkit/rkhunter rootkit signatures, hidden files, suspicious output and timeouts.</p>
+          </div>
+          <div class="card">
+            <h3>persistence</h3>
+            <p>UID 0 accounts, cron and systemd unit inspection, authorized_keys review and suspicious units.</p>
+          </div>
+          <div class="card">
+            <h3>network</h3>
+            <p>Listening sockets, established connections, and Ubuntu ESM security update detection.</p>
+          </div>
+          <div class="card">
+            <h3>web</h3>
+            <p>SQL injection, Log4Shell, Shellshock, XSS, webshell and sensitive-file probes, brute force, scanner noise.</p>
+          </div>
+          <div class="card">
+            <h3>auth</h3>
+            <p>Failed and successful logins, sudo denials, bursts and break-in indicators.</p>
+          </div>
+          <div class="card">
+            <h3>hardening</h3>
+            <p>Firewall, SSH settings, kernel sysctl coverage, and risky account configuration.</p>
+          </div>
+          <div class="card">
+            <h3>aws</h3>
+            <p>IMDSv1/v2, identity/profile, credential exposure, user-data secrets, agent and NTP state.</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Parallel and serial orchestration</h2>
+        <div class="split">
+          <div>
+            <p>Lightweight analyses (<code>web</code>, <code>auth</code>, <code>hardening</code>, <code>aws</code>) can share workers, while heavy stages remain barriers. Canonical report order is restored before notification and publishing.</p>
+            <code>rs-security-checker --parallel-jobs 0 --skip precheck --json</code>
+          </div>
+          <div>
+            <span class="pill">0 = auto (2-4 workers)</span>
+            <span class="pill">1 = sequential</span>
+            <span class="pill">max 32</span>
+            <span class="pill">fail-fast supported</span>
+            <span class="pill">artifact preservation</span>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Security and false-positive controls</h2>
+        <div class="split">
+          <div>
+            <ul>
+              <li>Explicit argv and fixed PATH; no shell fallbacks.</li>
+              <li>Sanitized environment, bounded output, process-group timeouts.</li>
+              <li>AWS file reads capped at 1 MiB; IMDS calls bypass proxies and have a 2-second cap.</li>
+              <li>Exceptions use <code>--allow-finding</code>, <code>--exceptions-file</code> patterns.</li>
+              <li>Structured JSON events go to stderr, leaving stdout audit-compatible.</li>
+            </ul>
+          </div>
+          <div>
+            <span class="pill pill--accent">no secrets in AWS report</span>
+            <span class="pill pill--accent">global or stage-scoped allowlists</span>
+            <span class="pill">reviewable exception files</span>
+            <span class="pill">build.rs guardrails</span>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Triage and model packaging</h2>
+        <p class="lead">The default laya stage runs the Laya typed-decision model in-process against a compact audit summary. The dataset in <code>laya-dataset/</code> describes that same System One model: every row pairs the audit context with typed notify/severity labels, and a Rust test keeps the question contract aligned. A thin <code>tools/finetune.py</code> wrapper drives Laya's upstream trainer on the multilingual base.</p>
+        <div class="grid">
+          <div class="card">
+            <h3>100 scenarios</h3>
+            <p>Eleven audit stages with clean, noise, expected, actionable, high, critical and coverage-loss variants, plus cross-stage cases.</p>
+          </div>
+          <div class="card">
+            <h3>72 / 14 / 14</h3>
+            <p>Deterministic train, validation and held-out test splits with catalog and manifest metadata.</p>
+          </div>
+          <div class="card">
+            <h3>Typed decisions</h3>
+            <p>Choice questions for notify and severity; no generated text to parse.</p>
+          </div>
+          <div class="card">
+            <h3>8,192-token window</h3>
+            <p>A tokenizer-free estimate warns at 90% and fails instead of silently truncating the audit context.</p>
+          </div>
+          <div class="card">
+            <h3>Checked in CI</h3>
+            <p>The generator and validator enforce split sizes, labels, context structure and the token budget.</p>
+          </div>
+          <div class="card">
+            <h3>Real audits</h3>
+            <p><code>summary_to_record.py</code> converts checker output into the same typed record.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer>
+      Theme tuned for a modern HUD look. Docs/CI can serve this page directly.
+    </footer>
+  </div>
+</body>
+</html>

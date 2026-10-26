@@ -1,0 +1,21 @@
+{
+  "notify": {
+    "type": "choice",
+    "instructions": "Does this audit warrant notifying the on-call engineer?",
+    "criteria": [
+      "true",
+      "false"
+    ]
+  },
+  "severity": {
+    "type": "choice",
+    "instructions": "What is the highest triage severity warranted by this audit?",
+    "criteria": [
+      "info",
+      "low",
+      "medium",
+      "high",
+      "critical"
+    ]
+  }
+}

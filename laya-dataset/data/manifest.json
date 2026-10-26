@@ -1,0 +1,105 @@
+{
+  "labels": {
+    "notify": {
+      "false": 36,
+      "true": 64
+    },
+    "severity": {
+      "critical": 8,
+      "high": 44,
+      "info": 12,
+      "low": 12,
+      "medium": 24
+    }
+  },
+  "questions_sha256": "d381fe647b94df071fdb1254725092d55ca6679654ecfb153589151abf26b3b5",
+  "schema_version": 2,
+  "splits": {
+    "test": {
+      "count": 14,
+      "notify": {
+        "false": 3,
+        "true": 11
+      },
+      "severity": {
+        "critical": 3,
+        "high": 6,
+        "info": 1,
+        "low": 1,
+        "medium": 3
+      },
+      "stage": {
+        "auth": 1,
+        "aws": 2,
+        "clamav": 1,
+        "debsums": 1,
+        "docker": 1,
+        "hardening": 1,
+        "multi-stage": 2,
+        "network": 1,
+        "persistence": 1,
+        "precheck": 1,
+        "rootkit": 1,
+        "web": 1
+      }
+    },
+    "train": {
+      "count": 72,
+      "notify": {
+        "false": 27,
+        "true": 45
+      },
+      "severity": {
+        "critical": 4,
+        "high": 33,
+        "info": 9,
+        "low": 9,
+        "medium": 17
+      },
+      "stage": {
+        "auth": 6,
+        "aws": 6,
+        "clamav": 6,
+        "debsums": 6,
+        "docker": 6,
+        "hardening": 6,
+        "multi-stage": 5,
+        "network": 6,
+        "persistence": 6,
+        "precheck": 6,
+        "rootkit": 6,
+        "web": 7
+      }
+    },
+    "valid": {
+      "count": 14,
+      "notify": {
+        "false": 6,
+        "true": 8
+      },
+      "severity": {
+        "critical": 1,
+        "high": 5,
+        "info": 2,
+        "low": 2,
+        "medium": 4
+      },
+      "stage": {
+        "auth": 1,
+        "aws": 1,
+        "clamav": 1,
+        "debsums": 1,
+        "docker": 1,
+        "hardening": 1,
+        "multi-stage": 3,
+        "network": 1,
+        "persistence": 1,
+        "precheck": 1,
+        "rootkit": 1,
+        "web": 1
+      }
+    }
+  },
+  "state_format": "audit-context-json",
+  "total": 100
+}

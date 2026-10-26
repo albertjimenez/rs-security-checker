@@ -1,0 +1,133 @@
+// Example Jenkins pipeline for the Rust security checker.
+//
+// This is an additive example: the original shell-based Jenkinsfile is kept for reference.
+// Build with all optional integrations only if the agent has network access to the model and
+// notification endpoints. Otherwise use `--features notifications`, `--features laya`, or no
+// features at all.
+pipeline {
+    agent any
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    parameters {
+        booleanParam(
+            name: 'INSTALL_DEPS',
+            defaultValue: false,
+            description: 'Install missing Debian/Ubuntu audit packages with apt-get (requires sudo).'
+        )
+    }
+
+    environment {
+        CARGO_HOME = "${WORKSPACE}/.cargo"
+        // Prefer Jenkins credentials/environment for secrets:
+        // SLACK_WEBHOOK_URL     = credentials('slack-security-webhook')
+        // TELEGRAM_BOT_TOKEN    = credentials('telegram-security-bot-token')
+        // TELEGRAM_CHAT_ID      = '123456789'
+    }
+
+    stages {
+        stage('Agent Readiness') {
+            steps {
+                sh '''
+                    set -eu
+
+                    # The audit uses dpkg/apt, sshd -T, journald/auth logs and Debian paths, so the
+                    # agent must be Ubuntu or Debian rather than an arbitrary Linux distribution.
+                    if [ ! -r /etc/os-release ]; then
+                        echo "[-] /etc/os-release is missing; this pipeline needs Ubuntu or Debian" >&2
+                        exit 1
+                    fi
+                    # shellcheck disable=SC1091
+                    . /etc/os-release
+                    case "${ID:-}" in
+                        ubuntu|debian)
+                            echo "[+] Detected ${PRETTY_NAME:-$ID}"
+                            ;;
+                        *)
+                            echo "[-] Unsupported agent OS: ${PRETTY_NAME:-unknown}; expected Ubuntu or Debian" >&2
+                            exit 1
+                            ;;
+                    esac
+
+                    for tool in cargo rustc; do
+                        if ! command -v "$tool" >/dev/null 2>&1; then
+                            echo "[-] $tool is not installed; install Rust (https://rustup.rs) on the agent" >&2
+                            exit 1
+                        fi
+                        echo "[+] $tool: $("$tool" --version)"
+                    done
+
+                    REQUIRED_PKGS="clamav clamav-freshclam debsums rkhunter chkrootkit iproute2"
+                    MISSING_PKGS=""
+                    for pkg in $REQUIRED_PKGS; do
+                        if dpkg -s "$pkg" >/dev/null 2>&1; then
+                            echo "[+] Installed: $pkg"
+                        else
+                            echo "[-] Missing package: $pkg"
+                            MISSING_PKGS="$MISSING_PKGS $pkg"
+                        fi
+                    done
+
+                    if ! command -v curl >/dev/null 2>&1; then
+                        echo "[!] curl is missing; the AWS IMDS checks will be skipped"
+                    fi
+
+                    if [ -n "$MISSING_PKGS" ] && [ "${INSTALL_DEPS:-false}" = "true" ]; then
+                        echo "[*] Installing missing dependencies:$MISSING_PKGS"
+                        sudo apt-get update -qq
+                        sudo env DEBIAN_FRONTEND=noninteractive \
+                            apt-get install -y --no-install-recommends $MISSING_PKGS
+                    elif [ -n "$MISSING_PKGS" ]; then
+                        echo "[!] Missing packages will be reported by the precheck stage; set INSTALL_DEPS=true to install them"
+                    fi
+                '''
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh '''
+                    cargo build --release --all-features
+                '''
+            }
+        }
+
+        stage('Security Audit') {
+            steps {
+                sh '''
+                    mkdir -p reports
+                    # Lightweight stages (web, auth, hardening, aws) run concurrently by default
+                    # with 2-4 workers. Use --parallel-jobs 1 for strictly sequential output.
+                    set -- --output-dir reports --fail-on high
+                    if [ "${INSTALL_DEPS:-false}" = "true" ]; then
+                        set -- "$@" --install-deps
+                    fi
+                    if [ -f "$WORKSPACE/rs-security-checker.exceptions" ]; then
+                        set -- "$@" --exceptions-file "$WORKSPACE/rs-security-checker.exceptions"
+                    fi
+                    if [ -n "${SLACK_WEBHOOK_URL:-}" ] || \
+                       { [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; }; then
+                        set -- "$@" --notify
+                        set -- "$@" --notify-on "${NOTIFY_ON:-high}"
+                        if [ "${NOTIFY_ALWAYS:-false}" = "true" ]; then
+                            set -- "$@" --notify-always
+                        fi
+                    fi
+                    if [ "${LAYA_ENABLED:-false}" = "true" ]; then
+                        set -- "$@" --laya
+                    fi
+                    ./target/release/rs-security-checker "$@"
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
+        }
+    }
+}

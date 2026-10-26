@@ -1,0 +1,44 @@
+[package]
+name = "rs-security-checker"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+description = "Safe, feature-guarded Rust replacement for the Debian security-audit Jenkins pipeline"
+license = "MIT"
+readme = "README.md"
+
+[features]
+default = []
+# Compiles the local-model triage integration (in-process Laya inference plus an optional
+# OpenAI-compatible HTTP backend).
+laya = ["dep:reqwest", "dep:url", "dep:laya-inference"]
+# Compiles the Slack + Telegram notification channels.
+notifications = ["dep:reqwest"]
+# Convenience alias for both optional integrations.
+full = ["laya", "notifications"]
+
+[dependencies]
+clap = { version = "4.6.7", features = ["derive", "env"] }
+nix = { version = "0.31.3", features = ["signal", "process", "user", "hostname"] }
+regex = "1.13.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+time = { version = "0.3.55", features = ["formatting"] }
+libc = "0.2.191"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "json", "rustls"], optional = true }
+url = { version = "2.5.8", optional = true }
+# Pure-Rust Laya inference (ModernBERT encoder + typed-decision head). The package is aliased so
+# the external crate does not collide with the local `laya` module.
+laya-inference = { package = "laya", version = "0.1.1", optional = true, default-features = false }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = "symbols"

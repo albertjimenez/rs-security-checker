@@ -1,0 +1,11 @@
+/target
+.idea
+.DS_Store
+/models/
+
+# Audit output (default --output-dir is the current directory)
+/reports/
+audit-summary.json
+audit-summary.md
+*-report.txt
+archive.zip
