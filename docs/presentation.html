@@ -212,7 +212,7 @@
           <span class="chip">fixed PATH + sanitized env</span>
           <span class="chip">bounded outputs</span>
           <span class="chip">process timeouts</span>
-          <span class="chip">11 staged coverage</span>
+          <span class="chip">15 staged coverage</span>
         </div>
       </div>
     </header>
@@ -226,8 +226,8 @@
             <p>Tests validate every stage, parallel disabled mode, excessive worker values, the runtime prompt and the typed-question contract.</p>
           </div>
           <div>
-            <span class="pill pill--accent">333 unit + 8 integration tests</span>
-            <span class="pill pill--accent">283 unit + 9 integration (default)</span>
+            <span class="pill pill--accent">372 unit + 8 integration (all features)</span>
+            <span class="pill pill--accent">322 unit + 9 integration (default)</span>
             <span class="pill">clippy clean default/full</span>
             <span class="pill">panic-contained stages</span>
           </div>
@@ -235,8 +235,10 @@
       </section>
 
       <section>
-        <h2>Eleven stages</h2>
-        <p class="lead">Each card maps to a first-class stage that can be executed alone, skipped, or excluded via documented false-positive patterns.</p>
+        <h2>Fifteen stages</h2>
+        <p class="lead">Each card maps to a first-class stage that can be executed alone, skipped, or excluded via
+          documented false-positive patterns. Fourteen produce findings; <code>precheck</code> only validates the
+          environment.</p>
         <div class="grid">
           <div class="card">
             <h3>precheck</h3>
@@ -282,6 +284,25 @@
             <h3>aws</h3>
             <p>IMDSv1/v2, identity/profile, credential exposure, user-data secrets, agent and NTP state.</p>
           </div>
+          <div class="card">
+            <h3>ca-trust</h3>
+            <p>Enabled eMudhra/emSign CAs, matches in the compiled bundle, and pending <code>ca-certificates</code>
+              updates.</p>
+          </div>
+          <div class="card">
+            <h3>process-forensics</h3>
+            <p>Processes from deleted executables, unlinked network listeners, and top CPU/memory consumers.</p>
+          </div>
+          <div class="card">
+            <h3>mount-mac</h3>
+            <p><code>noexec</code>/<code>nosuid</code>/<code>nodev</code> on temp and shared mounts, plus
+              AppArmor/SELinux enforcement.</p>
+          </div>
+          <div class="card">
+            <h3>broad-secrets</h3>
+            <p>Orphaned private keys, <code>.env</code> files, and plaintext <code>.git-credentials</code> under home,
+              web and opt roots.</p>
+          </div>
         </div>
       </section>
 
@@ -324,12 +345,36 @@
       </section>
 
       <section>
+        <h2>Delivery pipeline</h2>
+        <div class="split">
+          <div>
+            <p>CI gates every push and pull request: formatting, clippy on default and all features, the full test
+              suite, and a dedicated pipeline-syntax job that runs ShellCheck plus <code>bash -n</code> on the shell
+              entrypoint, parses both Jenkinsfiles with Groovy, and syntax-checks every embedded <code>sh</code> block.
+            </p>
+            <p>Tagging <code>v*</code> re-runs the tests, builds x86_64 and aarch64 musl binaries, and ships the
+              Jenkinsfiles and <code>debian-scripts/main.sh</code> both inside the archives and as raw release assets.
+            </p>
+          </div>
+          <div>
+            <span class="pill pill--accent">fmt + clippy + tests</span>
+            <span class="pill pill--accent">Groovy parse of both Jenkinsfiles</span>
+            <span class="pill">bash -n + ShellCheck</span>
+            <span class="pill">embedded sh block check</span>
+            <span class="pill">x86_64 + aarch64 musl</span>
+            <span class="pill">pipeline files attached to releases</span>
+          </div>
+        </div>
+      </section>
+
+      <section>
         <h2>Triage and model packaging</h2>
         <p class="lead">The default laya stage runs the Laya typed-decision model in-process against a compact audit summary. The dataset in <code>laya-dataset/</code> describes that same System One model: every row pairs the audit context with typed notify/severity labels, and a Rust test keeps the question contract aligned. A thin <code>tools/finetune.py</code> wrapper drives Laya's upstream trainer on the multilingual base.</p>
         <div class="grid">
           <div class="card">
             <h3>100 scenarios</h3>
-            <p>Eleven audit stages with clean, noise, expected, actionable, high, critical and coverage-loss variants, plus cross-stage cases.</p>
+            <p>Eleven stages in the checked-in dataset, covering clean, noise, expected, actionable, high, critical and
+              coverage-loss variants, plus cross-stage cases.</p>
           </div>
           <div class="card">
             <h3>72 / 14 / 14</h3>

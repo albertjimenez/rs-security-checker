@@ -4,8 +4,8 @@ A safe Rust port of the Debian security-audit pipeline in
 [`jenkins-pipeline/Jenkinsfile`](jenkins-pipeline/Jenkinsfile) and
 [`debian-scripts/main.sh`](debian-scripts/main.sh).
 
-The binary runs all eleven stages below and writes the same report artifacts as the shell and
-Jenkins pipelines. The four host-coverage stages are:
+The binary runs all fifteen stages below and writes the same report artifacts as the shell and
+Jenkins pipelines. The eight host-coverage stages are:
 
 - **Web server logs** — nginx / Apache / Caddy access, error and JSON logs.
 - **Authentication logs** — SSH, PAM, break-in markers and sudo denials.
@@ -13,6 +13,14 @@ Jenkins pipelines. The four host-coverage stages are:
   paths and password hygiene.
 - **AWS host & metadata** — EC2 IMDSv1/v2, instance profile, static credential exposure, cloud-init
   user-data, AWS agents and clock synchronization.
+- **CA trust & eMudhra** — compromised eMudhra/emSign entries in the OS trust store, matches in the
+  compiled bundle, and pending `ca-certificates` updates.
+- **Process forensics** — processes running from deleted executables, unlinked network listeners
+  and top CPU/memory consumers.
+- **Mount & MAC audit** — `noexec`/`nosuid`/`nodev` on `/tmp`, `/var/tmp` and `/dev/shm`, plus
+  AppArmor or SELinux enforcement.
+- **Broad secret discovery** — orphaned private keys, `.env` files and plaintext
+  `.git-credentials` under home, web and opt roots.
 
 It also offers two optional integrations:
 
@@ -72,19 +80,23 @@ Run `rs-security-checker --list-stages` to see the stage names accepted by `--on
 
 ## Pipeline mapping
 
-| Jenkins stage | Rust stage | Main commands | Artifact |
-|---|---|---|---|
-| Precheck & Dependencies | `precheck` | `dpkg -s`, optional `apt-get install` | — |
-| Docker Security Audit | `docker` | `docker ps`, `docker inspect` | `docker-audit-report.txt` |
-| ClamAV Scan | `clamav` | `freshclam`, `clamscan` | `clamav-report.txt` |
-| Debsums Integrity | `debsums` | `debsums -cs` | `debsums-report.txt` |
-| Rootkit Audits | `rootkit` | `chkrootkit -q`, `rkhunter` | `rootkit-report.txt` |
-| Persistence & Account Audit | `persistence` | `/etc/passwd`, crontabs, `authorized_keys`, `systemctl` | `persistence-report.txt` |
-| Network Sockets & Pending Patches | `network` | `ss`, `apt-get update`, `apt-get --just-print upgrade` | `network-updates-report.txt` |
-| Web Server Logs | `web` | nginx/Apache access + error logs, Caddy JSON logs | `web-logs-report.txt` |
-| Authentication Logs | `auth` | `auth.log`, `secure`, PAM/sshd/sudo records | `auth-logs-report.txt` |
-| Host Hardening | `hardening` | `sshd -T`, sysctl files, `ufw`/`nft`/`iptables`, sudoers, file modes, `/etc/passwd` + `/etc/shadow` | `hardening-report.txt` |
-| AWS Host & Metadata | `aws` | `/etc/os-release`, EC2 IMDSv1/v2, instance identity/profile, `~/.aws/*`, user-data, `/etc/environment`, `/etc/profile.d`, ECS config, `systemctl`, `timedatectl` | `aws-report.txt` |
+| Jenkins stage                     | Rust stage          | Main commands                                                                                                                                                    | Artifact                       |
+|-----------------------------------|---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------|
+| Precheck & Dependencies           | `precheck`          | `dpkg -s`, optional `apt-get install`                                                                                                                            | —                              |
+| Docker Security Audit             | `docker`            | `docker ps`, `docker inspect`                                                                                                                                    | `docker-audit-report.txt`      |
+| ClamAV Scan                       | `clamav`            | `freshclam`, `clamscan`                                                                                                                                          | `clamav-report.txt`            |
+| Debsums Integrity                 | `debsums`           | `debsums -cs`                                                                                                                                                    | `debsums-report.txt`           |
+| Rootkit Audits                    | `rootkit`           | `chkrootkit -q`, `rkhunter`                                                                                                                                      | `rootkit-report.txt`           |
+| Persistence & Account Audit       | `persistence`       | `/etc/passwd`, crontabs, `authorized_keys`, `systemctl`                                                                                                          | `persistence-report.txt`       |
+| Network Sockets & Pending Patches | `network`           | `ss`, `apt-get update`, `apt-get --just-print upgrade`                                                                                                           | `network-updates-report.txt`   |
+| Web Server Logs                   | `web`               | nginx/Apache access + error logs, Caddy JSON logs                                                                                                                | `web-logs-report.txt`          |
+| Authentication Logs               | `auth`              | `auth.log`, `secure`, PAM/sshd/sudo records                                                                                                                      | `auth-logs-report.txt`         |
+| Host Hardening                    | `hardening`         | `sshd -T`, sysctl files, `ufw`/`nft`/`iptables`, sudoers, file modes, `/etc/passwd` + `/etc/shadow`                                                              | `hardening-report.txt`         |
+| AWS Host & Metadata               | `aws`               | `/etc/os-release`, EC2 IMDSv1/v2, instance identity/profile, `~/.aws/*`, user-data, `/etc/environment`, `/etc/profile.d`, ECS config, `systemctl`, `timedatectl` | `aws-report.txt`               |
+| CA Trust & eMudhra Audit          | `ca-trust`          | `/etc/ca-certificates.conf`, `/etc/ssl/certs/ca-certificates.crt`, `apt-get update`, `apt-get --just-print upgrade ca-certificates`                              | `ca-trust-report.txt`          |
+| Process Forensics                 | `process-forensics` | `/proc/*/exe`, `ss -tulpn`, `ps -eo ... --sort=-%cpu`                                                                                                            | `process-forensics-report.txt` |
+| Mount & MAC Audit                 | `mount-mac`         | `/proc/self/mounts`, `aa-status --profiled`, `getenforce`                                                                                                        | `mount-mac-report.txt`         |
+| Broad Secret Discovery            | `broad-secrets`     | `find` for `*.pem`, `*.key`, `id_rsa`, `id_ed25519`, `.env`, `.git-credentials`                                                                                  | `secrets-report.txt`           |
 
 The web stage detects SQL injection, XSS, path traversal, command injection, Log4Shell,
 Shellshock, XML external entities, PHP/web-shell and upload probes, sensitive-file probes, scanner
@@ -101,6 +113,14 @@ directories, cloud-init user-data, environment files and ECS agent configuration
 user-data, inactive SSM/CloudWatch/ECS agents, and an unsynchronized clock. It never calls the AWS
 APIs, never prints credential values, and skips remote checks under `--dry-run`. Metadata requests
 use `--noproxy '*'` so an inherited HTTP proxy cannot intercept link-local traffic.
+
+The CA trust stage only reports entries that are actually enabled in
+`/etc/ca-certificates.conf` (commented and `!`-disabled entries are ignored), looks for raw
+eMudhra/emSign strings in the compiled bundle, and flags a pending `ca-certificates` upgrade as a
+medium-severity finding. The process forensics stage resolves `/proc/*/exe` natively instead of
+globbing in a shell, and the mount stage parses `/proc/self/mounts`, so both work without locale
+or column-format assumptions. The broad secret discovery stage skips roots that do not exist and
+caps the number of paths written to the report.
 
 The network stage recognizes Debian and Ubuntu security pockets, including Ubuntu ESM/ESM-Apps
 updates.
@@ -292,6 +312,7 @@ flowchart LR
         S1["precheck"] --> S2["docker"] --> S3["clamav"] --> S4["debsums"]
         S4 --> S5["rootkit"] --> S6["persistence"] --> S7["network"] --> S8["web"]
         S8 --> S9["auth"] --> S10["hardening"] --> S11["aws"]
+      S11 --> S12["ca-trust"] --> S13["process-forensics"] --> S14["mount-mac"] --> S15["broad-secrets"]
     end
 
     RUN --> stages

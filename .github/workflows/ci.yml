@@ -6,6 +6,28 @@ on:
   pull_request:
 
 jobs:
+  pipeline-syntax:
+    name: Pipeline syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pipeline tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y groovy shellcheck
+      - name: Bash syntax
+        run: |
+          bash -n debian-scripts/main.sh
+          shellcheck --shell=bash --severity=error debian-scripts/main.sh
+      - name: Groovy syntax (Jenkinsfiles)
+        run: |
+          for file in jenkins-pipeline/Jenkinsfile jenkins-pipeline/Jenkinsfile.rust; do
+            echo "Parsing $file"
+            groovy -e 'new GroovyShell().parse(new File(args[0]))' "$file"
+          done
+      - name: Shell syntax inside Jenkinsfile sh blocks
+        run: python3 scripts/check-jenkins-shell-blocks.py
+
   rust:
     name: Rust quality gate
     runs-on: ubuntu-latest

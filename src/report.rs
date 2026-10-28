@@ -102,10 +102,14 @@ pub enum StageId {
     Auth,
     Hardening,
     Aws,
+    CaTrust,
+    ProcessForensics,
+    MountMac,
+    BroadSecrets,
 }
 
 impl StageId {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 15] = [
         Self::Precheck,
         Self::Docker,
         Self::Clamav,
@@ -117,6 +121,10 @@ impl StageId {
         Self::Auth,
         Self::Hardening,
         Self::Aws,
+        Self::CaTrust,
+        Self::ProcessForensics,
+        Self::MountMac,
+        Self::BroadSecrets,
     ];
 
     pub const fn title(self) -> &'static str {
@@ -132,6 +140,10 @@ impl StageId {
             Self::Auth => "Authentication Logs",
             Self::Hardening => "Host Hardening",
             Self::Aws => "AWS Host & Metadata",
+            Self::CaTrust => "CA Trust & eMudhra Audit",
+            Self::ProcessForensics => "Process Forensics",
+            Self::MountMac => "Mount & MAC Audit",
+            Self::BroadSecrets => "Broad Secret Discovery",
         }
     }
 
@@ -149,6 +161,10 @@ impl StageId {
             Self::Auth => "auth",
             Self::Hardening => "hardening",
             Self::Aws => "aws",
+            Self::CaTrust => "ca-trust",
+            Self::ProcessForensics => "process-forensics",
+            Self::MountMac => "mount-mac",
+            Self::BroadSecrets => "broad-secrets",
         }
     }
 
@@ -166,6 +182,10 @@ impl StageId {
             Self::Auth => Some("auth-logs-report.txt"),
             Self::Hardening => Some("hardening-report.txt"),
             Self::Aws => Some("aws-report.txt"),
+            Self::CaTrust => Some("ca-trust-report.txt"),
+            Self::ProcessForensics => Some("process-forensics-report.txt"),
+            Self::MountMac => Some("mount-mac-report.txt"),
+            Self::BroadSecrets => Some("secrets-report.txt"),
         }
     }
 
@@ -704,6 +724,13 @@ mod tests {
         assert_eq!(StageId::Auth.artifact(), Some("auth-logs-report.txt"));
         assert_eq!(StageId::Hardening.artifact(), Some("hardening-report.txt"));
         assert_eq!(StageId::Aws.artifact(), Some("aws-report.txt"));
+        assert_eq!(StageId::CaTrust.artifact(), Some("ca-trust-report.txt"));
+        assert_eq!(
+            StageId::ProcessForensics.artifact(),
+            Some("process-forensics-report.txt")
+        );
+        assert_eq!(StageId::MountMac.artifact(), Some("mount-mac-report.txt"));
+        assert_eq!(StageId::BroadSecrets.artifact(), Some("secrets-report.txt"));
     }
 
     #[test]

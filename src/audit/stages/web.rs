@@ -529,7 +529,12 @@ mod tests {
 
     #[test]
     fn skips_when_no_logs_exist() {
-        let report = run_stage(StageId::Web, &FakeRunner::new(&[]), &test_config());
+        // Use an empty temporary directory instead of the host /var/log: CI runners may ship
+        // nginx/Apache/Caddy logs and would otherwise make this test environment-dependent.
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = test_config();
+        cfg.web_log_paths = vec![dir.path().to_path_buf()];
+        let report = run_stage(StageId::Web, &FakeRunner::new(&[]), &cfg);
         assert_eq!(report.status, StageStatus::Skipped);
         assert!(note(&report, "web log"));
     }

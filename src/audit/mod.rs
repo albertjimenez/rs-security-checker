@@ -60,6 +60,10 @@ pub fn execute(stage: StageId, ctx: &StageContext<'_>) -> StageReport {
             StageId::Auth => stages::auth::run(ctx),
             StageId::Hardening => stages::hardening::run(ctx),
             StageId::Aws => stages::aws::run(ctx),
+            StageId::CaTrust => stages::ca_trust::run(ctx),
+            StageId::ProcessForensics => stages::process_forensics::run(ctx),
+            StageId::MountMac => stages::mount_mac::run(ctx),
+            StageId::BroadSecrets => stages::broad_secrets::run(ctx),
         });
         match std::panic::catch_unwind(dispatch) {
             Ok(report) => report,

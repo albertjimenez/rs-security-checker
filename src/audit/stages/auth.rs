@@ -313,7 +313,12 @@ mod tests {
 
     #[test]
     fn skips_when_no_auth_logs_exist() {
-        let report = run_stage(StageId::Auth, &FakeRunner::new(&[]), &test_config());
+        // Use an empty temporary directory instead of the host /var/log: CI runners ship
+        // auth/sshd/sudo logs and would otherwise make this test environment-dependent.
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = test_config();
+        cfg.auth_log_paths = vec![dir.path().to_path_buf()];
+        let report = run_stage(StageId::Auth, &FakeRunner::new(&[]), &cfg);
         assert_eq!(report.status, StageStatus::Skipped);
         assert!(note(&report, "auth"));
     }

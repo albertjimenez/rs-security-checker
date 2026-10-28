@@ -88,7 +88,7 @@ pipeline {
                     else
                         sudo freshclam --quiet || true
                         sudo clamscan -r --infected --suppress-ok-results \
-                            /var/lib/docker/volumes /tmp /var/tmp /dev/shm > clamav-report.txt 2>&1 || true
+                            /tmp /var/tmp /dev/shm > clamav-report.txt 2>&1 || true
                     fi
                     cat clamav-report.txt
                 '''
@@ -839,6 +839,180 @@ pipeline {
             post {
                 always {
                     archiveArtifacts artifacts: 'aws-report.txt', allowEmptyArchive: true
+                }
+            }
+        }
+        stage('CA Trust & eMudhra Audit') {
+            steps {
+                sh '''
+                    echo "Auditing system trust store for compromised eMudhra/emSign CAs..."
+                    {
+                        echo "=== CA TRUST & eMudhra COMPROMISE AUDIT ==="
+
+                        # 1. Check OS trust store configuration for eMudhra/emSign
+                        if grep -qiE 'emudhra|emsign' /etc/ca-certificates.conf 2>/dev/null; then
+                            echo "[-] [HIGH] eMudhra or emSign certificates are active in /etc/ca-certificates.conf:"
+                            grep -iE 'emudhra|emsign' /etc/ca-certificates.conf | sed 's/^/  /'
+                            echo "--> ACTION: Verify if these match the compromised CAs (e.g., emSign ECC Root CA - G3)."
+                        else
+                            echo "[+] No eMudhra/emSign entries active in /etc/ca-certificates.conf."
+                        fi
+
+                        # 2. Check the compiled bundle directly for references
+                        if grep -qiE 'emudhra|emsign' /etc/ssl/certs/ca-certificates.crt 2>/dev/null; then
+                            echo "[-] [HIGH] Found eMudhra/emSign string matches in /etc/ssl/certs/ca-certificates.crt!"
+                            echo "--> ACTION: A manual distrust or package update is required."
+                        else
+                            echo "[+] The compiled ca-certificates.crt does not contain eMudhra/emSign strings."
+                        fi
+
+                        # 3. Check for pending CA package updates
+                        sudo apt-get update -qq
+                        PENDING_CA=$(apt-get --just-print upgrade ca-certificates 2>/dev/null | grep '^Inst ca-certificates' || true)
+                        if [ -n "$PENDING_CA" ]; then
+                            echo "[-] [MEDIUM] Pending security update for 'ca-certificates' package detected:"
+                            echo "  $PENDING_CA"
+                            echo "--> ACTION: Upgrading this package usually pulls in upstream distrust lists."
+                        else
+                            echo "[+] ca-certificates OS package is fully up to date."
+                        fi
+                    } > ca-trust-report.txt
+                    cat ca-trust-report.txt
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'ca-trust-report.txt', allowEmptyArchive: true
+                }
+            }
+        }
+        stage('Process Forensics') {
+            steps {
+                sh '''
+                    echo "Auditing running processes for fileless execution and anomalies..."
+                    {
+                        echo "=== PROCESSES RUNNING FROM DELETED FILES ==="
+                        # Finds running processes where the executable file has been deleted from disk
+                        DELETED_BINARIES=$(sudo ls -l /proc/[0-9]*/exe 2>/dev/null | grep -E '[(]deleted[)]' || true)
+                        if [ -n "$DELETED_BINARIES" ]; then
+                            echo "[-] [MEDIUM] Found processes running from deleted files (could be pending restarts after updates, or fileless malware):"
+                            printf '%s\n' "$DELETED_BINARIES" | awk '{print $9, $10, $11}' | sed 's/^/  /'
+                        else
+                            echo "[+] No processes executing from deleted binaries."
+                        fi
+
+                        echo "=== UNLINKED NETWORK PROCESSES ==="
+                        # Finds network connections mapped to processes that no longer exist on disk
+                        sudo ss -tulpn | grep ' (deleted)' || echo "[+] No deleted network listeners found."
+
+                        echo "=== CPU/MEMORY ANOMALIES (TOP 5) ==="
+                        echo "Highest CPU usage:"
+                        ps -eo pid,ppid,cmd,%cpu,%mem --sort=-%cpu | head -n 6 | sed 's/^/  /'
+                    } > process-forensics-report.txt
+                    cat process-forensics-report.txt
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'process-forensics-report.txt', allowEmptyArchive: true
+                }
+            }
+        }
+
+        stage('Mount & MAC Audit') {
+            steps {
+                sh '''
+                    echo "Auditing temporary mounts and Mandatory Access Control (MAC)..."
+                    {
+                        echo "=== TEMPORARY DIRECTORY MOUNTS ==="
+                        for mnt in /tmp /var/tmp /dev/shm; do
+                            # awk never returns exit code 1 for 'no match', making it immune to Jenkins set -e failures
+                            MOUNT_INFO=$(mount | awk -v m=" on $mnt " '$0 ~ m {print $0; exit}')
+
+                            if [ -z "$MOUNT_INFO" ]; then
+                                echo "[-] [LOW] $mnt is not mounted as a separate partition (harder to restrict)."
+                            else
+                                echo "$mnt is mounted: $MOUNT_INFO"
+                                for flag in noexec nosuid nodev; do
+                                    # Native shell case-matching avoids invoking a subshell or grep exit codes
+                                    case "$MOUNT_INFO" in
+                                        *"$flag"*) echo "  [+] Has $flag" ;;
+                                        *)         echo "  [-] [MEDIUM] Missing $flag" ;;
+                                    esac
+                                done
+                            fi
+                        done
+
+                        echo "=== MANDATORY ACCESS CONTROL ==="
+                        if command -v aa-status >/dev/null 2>&1; then
+                            # Safely extract ONLY numbers. If it errors out or prints text, it evaluates to empty.
+                            AA_STATUS=$(sudo aa-status --profiled 2>/dev/null | awk '/^[0-9]+$/ {print $1; exit}')
+                            AA_STATUS=${AA_STATUS:-0} # Default to 0 to prevent shell comparison syntax errors
+
+                            if [ "$AA_STATUS" -gt 0 ]; then
+                                echo "[+] AppArmor is active and profiling $AA_STATUS binaries."
+                            else
+                                echo "[-] [MEDIUM] AppArmor is installed but not profiling any binaries."
+                            fi
+                        elif command -v getenforce >/dev/null 2>&1; then
+                            SE_STATUS=$(getenforce 2>/dev/null || echo "Disabled")
+                            echo "SELinux status: $SE_STATUS"
+                            if [ "$SE_STATUS" = "Disabled" ] || [ "$SE_STATUS" = "Permissive" ]; then
+                                echo "[-] [MEDIUM] SELinux is not in Enforcing mode."
+                            fi
+                        else
+                            echo "[-] [LOW] No AppArmor or SELinux tooling detected."
+                        fi
+                    } > mount-mac-report.txt
+                    cat mount-mac-report.txt
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'mount-mac-report.txt', allowEmptyArchive: true
+                }
+            }
+        }
+
+        stage('Broad Secret Discovery') {
+            steps {
+                sh '''
+                    echo "Scanning for exposed SSH keys, environment files, and Git credentials..."
+                    {
+                        echo "=== ORPHANED SSH PRIVATE KEYS ==="
+                        # Search for private keys outside of secure .ssh directories
+                        ORPHANED_KEYS=$(sudo find /home /root /var/www /opt -type f \\( -name "*.pem" -o -name "*.key" -o -name "id_rsa" -o -name "id_ed25519" \\) ! -path "*/.ssh/*" 2>/dev/null || true)
+                        if [ -n "$ORPHANED_KEYS" ]; then
+                            echo "[-] [MEDIUM] Found private keys outside of standard .ssh directories:"
+                            printf '%s\n' "$ORPHANED_KEYS" | sed 's/^/  /'
+                        else
+                            echo "[+] No orphaned private keys found."
+                        fi
+
+                        echo "=== ENVIRONMENT (.env) FILES ==="
+                        ENV_FILES=$(sudo find /home /var/www /opt -type f -name ".env" 2>/dev/null | head -n 20 || true)
+                        if [ -n "$ENV_FILES" ]; then
+                            echo "[-] [LOW] Found .env files (check these manually for hardcoded database/API secrets):"
+                            printf '%s\n' "$ENV_FILES" | sed 's/^/  /'
+                        else
+                            echo "[+] No standard .env files located in web or user roots."
+                        fi
+
+                        echo "=== STORED GIT CREDENTIALS ==="
+                        GIT_CREDS=$(sudo find /home /root -type f -name ".git-credentials" 2>/dev/null || true)
+                        if [ -n "$GIT_CREDS" ]; then
+                            echo "[-] [HIGH] Found plaintext Git credentials stored on disk:"
+                            printf '%s\n' "$GIT_CREDS" | sed 's/^/  /'
+                        else
+                            echo "[+] No plaintext .git-credentials found."
+                        fi
+                    } > secrets-report.txt
+                    cat secrets-report.txt
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'secrets-report.txt', allowEmptyArchive: true
                 }
             }
         }

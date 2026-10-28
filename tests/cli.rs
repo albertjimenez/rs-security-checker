@@ -80,7 +80,7 @@ fn all_stages_can_be_dry_run() {
     );
 
     let summary: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(summary["stages"].as_array().unwrap().len(), 10);
+    assert_eq!(summary["stages"].as_array().unwrap().len(), 14);
     assert!(dir.path().join("audit-summary.json").exists());
     assert!(dir.path().join("audit-summary.md").exists());
 }
@@ -108,7 +108,7 @@ fn all_stages_can_run_with_parallelism_disabled() {
         String::from_utf8_lossy(&output.stderr)
     );
     let summary: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(summary["stages"].as_array().unwrap().len(), 10);
+    assert_eq!(summary["stages"].as_array().unwrap().len(), 14);
 }
 
 #[test]
@@ -146,6 +146,10 @@ fn list_stages_prints_every_stage() {
         "auth",
         "hardening",
         "aws",
+        "ca-trust",
+        "process-forensics",
+        "mount-mac",
+        "broad-secrets",
     ] {
         assert!(stdout.contains(stage), "missing {stage} in:\n{stdout}");
     }

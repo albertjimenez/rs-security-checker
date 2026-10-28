@@ -7,7 +7,7 @@ case-insensitive substrings against finding messages; add a `stage:` prefix to s
 Stable stage IDs:
 
 `precheck`, `docker`, `clamav`, `debsums`, `rootkit`, `persistence`, `network`, `web`, `auth`,
-`hardening`, `aws`
+`hardening`, `aws`, `ca-trust`, `process-forensics`, `mount-mac`, `broad-secrets`
 
 Examples:
 

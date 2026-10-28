@@ -11,6 +11,35 @@ mod tests {
     use crate::config::test_config;
     use crate::test_support::ui;
 
+    /// A temporary directory whose path does not contain `tmp`, `home` or `srv`.
+    ///
+    /// `tempfile::tempdir()` lands under `/tmp` on Linux and under `/var/folders` on macOS.
+    /// `is_temp_location`/`is_shared_location` intentionally classify those path components,
+    /// so tests about ordinary locations must build their tree somewhere neutral.
+    fn neutral_tempdir() -> tempfile::TempDir {
+        fs::create_dir_all("target").unwrap();
+        tempfile::Builder::new()
+            .prefix("hardening-test-")
+            .tempdir_in("target")
+            .unwrap()
+    }
+
+    /// Fixture path relative to the working directory.
+    ///
+    /// `tempfile` makes even a relative base absolute, so on GitHub Actions the fixture lives
+    /// under `/home/runner/...`. `is_shared_location` treats any `home` component as a shared
+    /// location, so scanning that absolute path would raise severity for every finding. Using a
+    /// relative root keeps these tests focused on the path *inside* the fixture.
+    fn neutral_path(dir: &tempfile::TempDir) -> PathBuf {
+        let Ok(cwd) = std::env::current_dir() else {
+            return dir.path().to_path_buf();
+        };
+        dir.path()
+            .strip_prefix(&cwd)
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|_| dir.path().to_path_buf())
+    }
+
     fn paths(dir: &Path) -> HardeningPaths {
         HardeningPaths {
             sshd_config: dir.join("sshd_config"),
@@ -60,7 +89,11 @@ mod tests {
         let report = run_with(dir.path(), &FakeRunner::new(&[]), |_| {});
 
         assert!(finding(&report, Severity::High, "root login"));
-        assert!(finding(&report, Severity::Medium, "password authentication"));
+        assert!(finding(
+            &report,
+            Severity::Medium,
+            "password authentication"
+        ));
         assert!(finding(&report, Severity::High, "empty passwords"));
         assert!(finding(&report, Severity::Medium, "environment files"));
         assert!(finding(&report, Severity::Medium, "PAM disabled"));
@@ -304,8 +337,9 @@ mod tests {
 
     #[test]
     fn scan_detects_dangerous_file_modes() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("root");
+        let dir = neutral_tempdir();
+        let base = neutral_path(&dir);
+        let root = base.join("root");
         fs::create_dir_all(&root).unwrap();
 
         let suid = root.join("custom-tool");
@@ -328,13 +362,17 @@ mod tests {
         fs::create_dir_all(&sticky).unwrap();
         fs::set_permissions(&sticky, fs::Permissions::from_mode(0o1777)).unwrap();
 
-        let report = run_with(dir.path(), &FakeRunner::new(&[]), |paths| {
+        let report = run_with(&base, &FakeRunner::new(&[]), |paths| {
             paths.scan_roots = vec![root.clone()];
         });
 
         assert!(finding(&report, Severity::Low, "unexpected SUID/SGID"));
         assert!(finding(&report, Severity::Medium, "world-writable file"));
-        assert!(finding(&report, Severity::Medium, "world-writable directories"));
+        assert!(finding(
+            &report,
+            Severity::Medium,
+            "world-writable directories"
+        ));
         assert!(!report.output.contains("sticky"));
     }
 
@@ -380,15 +418,16 @@ mod tests {
 
     #[test]
     fn long_path_lists_are_truncated() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("root");
+        let dir = neutral_tempdir();
+        let base = neutral_path(&dir);
+        let root = base.join("root");
         fs::create_dir_all(&root).unwrap();
         for index in 0..21 {
             let path = root.join(format!("open-{index}"));
             write(&path, "x");
             fs::set_permissions(&path, fs::Permissions::from_mode(0o666)).unwrap();
         }
-        let report = run_with(dir.path(), &FakeRunner::new(&[]), |paths| {
+        let report = run_with(&base, &FakeRunner::new(&[]), |paths| {
             paths.scan_roots = vec![root];
         });
         assert!(report.output.contains("... and 1 more"));
